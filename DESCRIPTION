@@ -1,11 +1,36 @@
 Package: dvsc
 Type: Package
-Title: What the Package Does (Title Case)
+Title: Useful functions for analysing single-cell datasets 
 Version: 0.1.0
-Author: Who wrote it
-Maintainer: The package maintainer <yourself@somewhere.net>
-Description: More about what it does (maybe more than one line)
-    Use four spaces when indenting paragraphs within the Description.
-License: What license is it under?
+Authors@R: person("Dane", "Vassilaidis", email = "dane.vassiliadis@petermac.org",
+                  role = c("aut", "cre"))
+Maintainer: Dane Vassiliadis <dane.vassiliadis@petermac.org>
+Description: Useful functions for analysing single-cell datasets 
+License: MIT + file LICENSE
 Encoding: UTF-8
 LazyData: true
+Suggests: 
+    testthat,
+    knitr,
+    rmarkdown
+Imports:
+    ggplot2,
+    scater,
+    rsvd,
+    Rtsne,
+    cowplot,
+    BiocSingular,
+    scran,
+    Seurat,
+    SingleR,
+    sctransform,
+    DropletUtils,
+    PCAtools,
+    biomaRt,
+    stringr,
+    clusterProfiler,
+    ggpubr
+RoxygenNote: 7.1.2
+VignetteBuilder: knitr
+Depends:
+    R (>= 4.0)

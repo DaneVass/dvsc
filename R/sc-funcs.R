@@ -1,79 +1,19 @@
 # single-cell custom functions
 
 
-
-# custom functions to output rasterised versions of plots for ease of use in illustrator. this was so incredibly frustrating
-# Using the ggpubr package. just print out the legend. Useful for AugmentPlot plots because the legends are lost
-getlegend <- function(plot){
-  require(ggpubr)
-  # Extract the legend. Returns a gtable
-  legend <- get_legend(plot)
-  # Convert to a ggplot and print
-  as_ggplot(legend)
-}
-
-# these functions are to be used under pdf statements
-plotAugmentDim <- function(obj, reduction = "umap", label = F, label.size = 6, group.by = NULL, title = NULL, dpi = 600, pt.size = 1, cells.highlight = NULL, cols.highlight = "red", sizes.highlight = 2, split.by = NULL){
-  p <- DimPlot(obj, reduction = reduction, label = label, label.size = label.size, group.by = group.by, pt.size = pt.size, cells.highlight = cells.highlight, cols.highlight = cols.highlight, sizes.highlight = sizes.highlight, split.by = split.by) +
-    ggtitle(title)
-  print(AugmentPlot(p, dpi = dpi))
-  print(getlegend(p))
-}
-
-plotAugmentFeature <- function(obj, reduction = "umap", features = NULL, label = F, label.size = 6, group.by = NULL, title = NULL, dpi = 600, pt.size = 1, order = T, ncol = NULL){
-  p <- FeaturePlot(obj, reduction = reduction, features = features, label = label, label.size = label.size, pt.size = pt.size, order = order, ncol = ncol) +
-    ggtitle(title)
-  print(AugmentPlot(p, dpi = dpi))
-  print(getlegend(p))
-}
-
-plotAugmentScatter <-
-
-
-plotElbow <- function(obj, outdir = NULL, samplename = "sample"){
-  require(PCAtools)
-  require(Seurat)
-  percent.var <- Stdev(obj)
-  elbow.dim <- PCAtools::findElbowPoint(percent.var)
-  p <- Seurat::ElbowPlot(obj, ndims = 50) +
-    geom_vline(aes(xintercept = elbow.dim), color = "red") +
-    labs(title = paste("Elbow plot -", samplename), subtitle = paste("Predicted elbow PC =", elbow.dim))
-
-  if(is.null(outdir)){
-    print(p)
-  } else {
-    ggsave(file.path(outdir,paste(prefix,".pdf", sep = '')), width = 8, height = 6)
-  }
-}
-
-match.barcodes.to.cells <- function(all.cells, cells.w.barcode.df){
-    # matches cells in a single cell experiment to detected DNA barcodes.
-    # all cells is a list of all cells in the experiment
-    # cells.w.barcode.df is a dataframe with cell id and barcode id as columns
-    # dataframe returned will have all cells matched to a barcode
-    # if there is no barcode matchable to a cell "not.detected" is returned
-    # for cells that have multiple detected barcodes each barcode is returned separated by ';'
-    cell.barcode.annotation <- data.frame()
-    for (id in all.cells){
-        keep <- which(cells.w.barcode.df$Cell.10X.Barcode == id)
-        df <- cells.w.barcode.df[keep,]
-        unique.barcodes <- length(unique(df$referenceID))
-        if (unique.barcodes == 0){
-            df.2 <- data.frame(cell.id = id, barcode = "not.detected")
-            cell.barcode.annotation <- rbind(df.2, cell.barcode.annotation)
-        }
-        if (unique.barcodes == 1){
-            df.2 <- data.frame(cell.id = id, barcode = df[1,2])
-            cell.barcode.annotation <- rbind(df.2, cell.barcode.annotation)
-        }
-        if (unique.barcodes > 1){
-            barcodes <- paste(unique(df$referenceID), collapse = ";")
-            df.2 <- data.frame(cell.id = id, barcode = barcodes)
-            cell.barcode.annotation <- rbind(df.2, cell.barcode.annotation)
-        }
-    }
-    return(cell.barcode.annotation)
-}
+#' plotBarcodesPerCell
+#'
+#' plot the number of barcodes detected per cell.
+#' For use with barcode labelled cells. also useful for single cell CRISPR screens
+#'
+#' @param obj a Seurat object
+#' @param samplename sample name
+#'
+#' @return Returns a plot of the number of barcodes detected per cell
+#'
+#' @import Seurat
+#' @export
+#'
 
 plotBarcodesPerCell <- function(obj, samplename = "Seurat.obj"){
   meta.data <- obj@meta.data
@@ -87,19 +27,31 @@ plotBarcodesPerCell <- function(obj, samplename = "Seurat.obj"){
     }
   }
   print(table(counts))
-  p <- ggplot() + geom_histogram(aes(x = counts), binwidth = 1) +
-    theme_bw() +
-    ggtitle(paste("Num Barcodes per Cell:", samplename))
+  p <- ggplot2::ggplot() +
+    ggplot2::geom_histogram(ggplot2::aes(x = counts), binwidth = 1) +
+    ggplot2::theme_bw() +
+    ggplot2::ggtitle(paste("Num Barcodes per Cell:", samplename))
   print(p)
 }
 
-convertHumanGeneList <- function(x){
-  require("biomaRt")
-  human = useMart("ensembl", dataset = "hsapiens_gene_ensembl")
-  mouse = useMart("ensembl", dataset = "mmusculus_gene_ensembl")
-  genesV2 = getLDS(attributes = c("hgnc_symbol"),
+#' convertHumanGeneList
+#'
+#' convert human gene list to mouse gene symbols
+#'
+#' @param genes a list of genes to convert
+#'
+#' @return Returns a list of converted gene symbols.
+#'
+#' @import biomaRt
+#' @export
+#'
+
+convertHumanGeneList <- function(genes){
+  human = biomaRt::useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+  mouse = biomaRt::useMart("ensembl", dataset = "mmusculus_gene_ensembl")
+  genesV2 = biomaRt::getLDS(attributes = c("hgnc_symbol"),
                    filters = "hgnc_symbol",
-                   values = x , mart = human,
+                   values = genes , mart = human,
                    attributesL = c("mgi_symbol"),
                    martL = mouse,
                    uniqueRows=T)
@@ -111,61 +63,49 @@ convertHumanGeneList <- function(x){
   return(humanx)
 }
 
+#' convertGeneListFormat
+#'
+#' convert gene list format between ENSEMBL ENTREZ and HGNC sybmol
+#'
+#' @param genes a list of gene symbols
+#' @param species species of the gene symbols. One of "Hs" (human) or "Mm" (mouse)
+#' @param from gene list format to convert from
+#' @param to gene list format to convert to
+#'
+#' @return Returns a data-frame containing the gene symbols converted to new format.
+#'
+#' @export
+#'
+
 # convert between different gene name formats using bitr
-convertGeneListFormat <- function(x, species = "Hs", from = "SYMBOL", to = "ENTREZID", ...){
-  require(clusterProfiler)
-  require(bitr)
+convertGeneListFormat <- function(genes, species = "Hs", from = "SYMBOL", to = "ENTREZID"){
 
   # import Org.Db
   if (species == "Hs"){
-    library(org.Hs.eg.db)
-    db <- org.Hs.eg.db
+    org.Hs.eg.db::org.Hs.eg.db
+    db <- org.Hs.eg.db::org.Hs.eg.db
   }
   if (species == "Mm"){
-    library(org.Mm.eg.db)
-    db <- org.Mm.eg.db
+    org.Mm.eg.db::org.Mm.eg.db
+    db <- org.Mm.eg.db::org.Mm.eg.db
   }
-  df <- bitr(x, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Mm.eg.db, drop = F)
+  df <- clusterProfiler::bitr(genes, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = db, drop = F)
   return(df)
 }
 
-findDoubletsByBarcode.2 <- function(obj){
-  message("Finding doublets by Barcode")
-  doublets.by.barcode <- c()
 
-  # assert barcodes are present in object
-  if(is.null(obj$barcode)){
-    message("no barcode field identified in object metadata. Stopping")
-    break()
-  }
+#' findDoubletsByBarcode
+#'
+#' Find cells that have a unique combination of barcodes. Probably doublets
+#'
+#' @param obj a Seurat object
+#' @param threshold number of times barcode pair must be observed for cell to be considered not a doublet
+#'
+#' @return Returns a Seurat object containing doubletBarcode metadata field
+#'
+#' @export
+#'
 
-  # identify cells that have more than 2 barcodes for automatic filtering
-  barcodes <- str_split(obj$barcode, pattern = ";", simplify = F)
-  selection <- which(lapply(barcodes, length) > 2)
-  selection <- rownames(obj@meta.data[selection,])
-
-  # filter cells that have 1 or more than two barcodes
-  barcodes <- as.data.frame(str_split(obj$barcode, pattern = ";", simplify = T), row.names = rownames(obj@meta.data))[,c(1,2)]
-  barcodes$V2 <- gsub(barcodes$V2, pattern = "^$|^ $", replacement = NA)
-  barcodes <- na.omit(barcodes)
-
-  # find cells that have unique combinations of barcodes in any order
-  # these are likely doublets that can be filtered
-  for (i in 1:nrow(barcodes)){
-    cell.fwd <- paste(barcodes[i,]$V1, barcodes[i,]$V2, sep = ";")
-    cell.rev <- paste(barcodes[i,]$V2, barcodes[i,]$V1, sep = ";")
-    same.cells <- which(obj$barcode == cell.fwd | obj$barcode == cell.rev)
-    if (length(obj$barcode[same.cells]) == 1){
-      cell.to.filter <- names(obj$barcode[same.cells])
-      doublets.by.barcode <- c(doublets.by.barcode, cell.to.filter)
-    }
-  }
-  # add cells with 3 or more barcodes to the other doublets
-  doublets.by.barcode <- c(doublets.by.barcode, selection)
-  return(doublets.by.barcode)
-}
-
-# Enids method - way better than mine
 findDoubletsByBarcode <- function(obj, threshold = 2){
   doublets.by.barcode <- c()
 
@@ -201,9 +141,25 @@ findDoubletsByBarcode <- function(obj, threshold = 2){
   return(obj)
 }
 
+#' runClusterProfiler
+#'
+#' run clusterProfiler on a set of dge results from Seurat::FindMarkers
+#'
+#' @param dge a Seurat object
+#' @param lfc.threshold fold change threshold
+#' @param padj.threshold adjusted p value threshold
+#' @param OrgDb org db object for relevant species. org.Mm.eg.db or org.Hs.eg.db
+#' @param category GO category to test. e.g "BP", "MF", or "CC"
+#' @param sample name of sample gene set
+#' @param outdir path to desired output directory
+#'
+#' @return Returns plots and a table of clusterProfiler results
+#'
+#' @export
+#'
 
-
-runClusterProfiler <- function(dge, lfc.threshold = 0.2, padj.threshold = 0.1, OrgDb = org.Mm.eg.db, category = "BP", sample = "gene-set", outdir = NULL){
+runClusterProfiler <- function(dge, lfc.threshold = 0.2, padj.threshold = 0.1, OrgDb = org.Mm.eg.db,
+                               category = "BP", sample = "gene-set", outdir = NULL){
   message(paste("Running ClusterProfiler on", sample))
   if (category == "BP"){
     message("Examining Biological Process categories")
@@ -218,11 +174,11 @@ runClusterProfiler <- function(dge, lfc.threshold = 0.2, padj.threshold = 0.1, O
   geneset.dn <- rownames(dge[which(dge$avg_logFC < -lfc.threshold),])
 
   # convert gene symbols to Entrez id
-  gene.df.up <- bitr(geneset.up, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = OrgDb)
-  gene.df.dn <- bitr(geneset.dn, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = OrgDb)
+  gene.df.up <- clusterProfiler::bitr(geneset.up, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = OrgDb)
+  gene.df.dn <- clusterProfiler::bitr(geneset.dn, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = OrgDb)
 
   # get enriched GO terms
-  ego.up <- enrichGO(gene = gene.df.up$ENTREZID,
+  ego.up <- clusterProfiler::enrichGO(gene = gene.df.up$ENTREZID,
                      OrgDb = OrgDb, ont = category,
                      pAdjustMethod = "BH",
                      pvalueCutoff = 0.01,
@@ -230,7 +186,7 @@ runClusterProfiler <- function(dge, lfc.threshold = 0.2, padj.threshold = 0.1, O
                      readable = TRUE)
   head(ego.up, 20)
 
-  ego.dn <- enrichGO(gene = gene.df.dn$ENTREZID,
+  ego.dn <- clusterProfiler::enrichGO(gene = gene.df.dn$ENTREZID,
                      OrgDb = OrgDb, ont = category,
                      pAdjustMethod = "BH",
                      pvalueCutoff = 0.01,
@@ -238,8 +194,8 @@ runClusterProfiler <- function(dge, lfc.threshold = 0.2, padj.threshold = 0.1, O
                      readable = TRUE)
   head(ego.dn, 20)
 
-  print(barplot(ego.up, showCategory=15) + ggtitle(paste("Upregulated", category, "GO terms in", sample)))
-  print(barplot(ego.dn, showCategory=15) + ggtitle(paste("Downregulated", category, "GO terms in", sample)))
+  print(clusterProfiler::barplot(ego.up, showCategory=15) + ggtitle(paste("Upregulated", category, "GO terms in", sample)))
+  print(clusterProfiler::barplot(ego.dn, showCategory=15) + ggtitle(paste("Downregulated", category, "GO terms in", sample)))
 
   print(clusterProfiler::emapplot(ego.up, showCategory=15) + ggtitle(paste("Upregulated", category, "GO terms in", sample)))
   print(clusterProfiler::emapplot(ego.dn, showCategory=15)+ ggtitle(paste("Downregulated", category, "GO terms in", sample)))
@@ -259,24 +215,32 @@ runClusterProfiler <- function(dge, lfc.threshold = 0.2, padj.threshold = 0.1, O
   if (!is.null(outdir)){
     plot.dir <- file.path(outdir)
     pdf(file.path(plot.dir,paste(sample,"_clusterProfiler_output.pdf", sep = '')), useDingbats = F)
-    print(barplot(ego.up, showCategory=15) + ggtitle(paste("Upregulated", category, "GO terms in", sample)))
-    print(barplot(ego.dn, showCategory=15) + ggtitle(paste("Downregulated", category, "GO terms in", sample)))
+    print(clusterProfiler::barplot(ego.up, showCategory=15) + ggtitle(paste("Upregulated", category, "GO terms in", sample)))
+    print(clusterProfiler::barplot(ego.dn, showCategory=15) + ggtitle(paste("Downregulated", category, "GO terms in", sample)))
     print(clusterProfiler::emapplot(ego.up, showCategory=15) + ggtitle(paste("Upregulated", category, "GO terms in", sample)))
     print(clusterProfiler::emapplot(ego.dn, showCategory=15)+ ggtitle(paste("Downregulated", category, "GO terms in", sample)))
     dev.off()
   }
 }
 
+#' findDoubletsBySimulation
+#'
+#' Find cells in a Seurat / SCE object that may be doublets based on a few different simulation methods from scds and scran packages
+#'
+#' @param obj a Seurat or SingleCellExperiment object
+#' @param ntop number of top variable genes to use for simulations
+#' @param mads median absolute deviations to use as threshold for doublet calls
+#' @param seed random seed to use
+#'
+#' @return Returns a Seurat object containing doubletBarcode metadata field
+#'
+#' @export
+#'
+
 findDoubletsBySimulation <- function(obj, ntop = 1000, mads = 3, seed = 10101){
   message("Running doublet detection on input single cell object using scds and scran methods")
-  require(scds)
-  require(scater)
-  require(rsvd)
-  require(Rtsne)
-  require(cowplot)
-  require(BiocSingular)
-  require(scran)
 
+  # setup random seed
   set.seed(seed)
 
   # identify single cell object class
@@ -293,7 +257,7 @@ findDoubletsBySimulation <- function(obj, ntop = 1000, mads = 3, seed = 10101){
     sample.sce <- obj
   }
 
-  # scds doublet detection
+  # Run scds doublet detection
   message("")
   message("#- Annotate doublets using co-expression based doublet scoring:")
   sample.sce <- cxds(sce = sample.sce, retRes = T, verb = T, estNdbl = T, ntop = ntop)
@@ -306,7 +270,7 @@ findDoubletsBySimulation <- function(obj, ntop = 1000, mads = 3, seed = 10101){
   message("#- Annotate doublets using hybrid co-expression and simulation approach:")
   sample.sce <- cxds_bcds_hybrid(sample.sce, verb = T, estNdbl = T)
 
-  # scran simulation approach
+  # Run scran simulation approach
   message("")
   message("#- Annotate doublets using scran doublet simulation approach:")
   dbl.dens <- doubletCells(sample.sce, d = ncol(reducedDim(sample.sce)))
@@ -369,39 +333,53 @@ findDoubletsBySimulation <- function(obj, ntop = 1000, mads = 3, seed = 10101){
   table(rownames(sample@meta.data) == rownames(colData(sample.sce)))
 }
 
-# edge R for 2 groups Ctrl vs Test
+
+#' run_edgeR_LRT
+#'
+#' Run edge R for 2 groups Ctrl vs Test using the Likelihood Ratio Test (LRT)
+#' Adapted from Sonesson et al. 2019?? Nat comms
+#' https://github.com/csoneson/conquer_comparison/blob/master/scripts/apply_edgeRLRT.R
+#' This is a simple A vs B test. See other functions for more complex GLMs
+#'
+#' @param counts raw counts from single cell object, rows as features and columns as cells
+#' @param group which factor in object metadata to use for testing. Should only have 2 levels
+#' @param plots Logical. print plots
+#'
+#' @return Returns a Seurat object containing doubletBarcode metadata field
+#'
+#' @import edgeR
+#'
+#' @export
+
 run_edgeR_LRT <- function(counts, group, plots = F){
-  suppressPackageStartupMessages(require(edgeR))
-  # this is a simple A vs B test. See other functions for more complex GLMs
-  # adapted from
-  # https://github.com/csoneson/conquer_comparison/blob/master/scripts/apply_edgeRLRT.R
+
   message("Running edgeR LRT")
   session_info <- sessionInfo()
   timing <- system.time({
-    dge <- DGEList(counts, group = group)
+    dge <- edgeR::DGEList(counts, group = group)
     message("Calculate normalisation factors")
-    dge <- calcNormFactors(dge)
+    dge <- edgeR::calcNormFactors(dge)
     message("Generate model matrix")
-    design <- model.matrix(~ group)
+    design <- edgeR::model.matrix(~ group)
     print(design)
     message("Estimate dispersions")
-    dge <- estimateDisp(dge, design = design)
+    dge <- edgeR::estimateDisp(dge, design = design)
     message("Fit GLM model")
-    fit <- glmFit(dge, design = design)
+    fit <- edgeR::glmFit(dge, design = design)
     message("Likelihood ratio test")
-    lrt <- glmLRT(fit)
+    lrt <- edgeR::glmLRT(fit)
     message("Export top tags")
-    tt <- topTags(lrt, n = Inf)
+    tt <- edgeR::topTags(lrt, n = Inf)
   })
 
   # plots
   if(isTRUE(plots)){
     message("Plotting, this could take a while...")
-    plotBCV(dge)
+    edgeR::plotBCV(dge)
     hist(tt$table$PValue, 50)
     hist(tt$table$FDR, 50)
     limma::plotMDS(dge, col = as.numeric(as.factor(group)), pch = 19)
-    plotSmear(lrt)
+    edgeR::plotSmear(lrt)
     message("Plotting complete")
   }
 
